@@ -19,11 +19,15 @@ def serial_stuff(target_temp, signal, p):
                 raise Exception
             if byte == '\r':
                 #print line_buffer #Or pass the data somewhere else
-                if output_temp < 0:
+                if output_temp < -998:
+                    foo = com.write("E000\r\n")
+                elif output_temp < 0:
                     foo = com.write("{0}\r\n".format(output_temp))
                 else:
                     foo = com.write("+{0}\r\n".format(output_temp))
-                if output_temp < target_temp.value:
+                if output_temp < -998 and target_temp >= -998:
+                    output_temp = target_temp.value
+                elif output_temp < target_temp.value:
                     output_temp = output_temp + 1
                 elif output_temp > target_temp.value:
                     output_temp = output_temp - 1
@@ -50,17 +54,23 @@ def web_stuff(target_temp, signal, p, history):
             req = s.get(location_url)
             req.raise_for_status()
             #print req.headers
-            current_obs = ET.fromstring(req.text)
+            current_obs = ET.fromstring(req.content)
             ksgf_temp = float(current_obs.find('temp_f').text)
-            #print ksgf_temp
+            print current_obs.find("location").text
             cur_obs_time = current_obs.find('observation_time_rfc822').text
             if last_obs_time != cur_obs_time:
                 history.append([ksgf_temp,
                                 current_obs.find('observation_time_rfc822').text,
                                 time.strftime("%a, %d %b %Y %H:%M:%S -0600")])
+                #speech.say("At {location}, the weather was {weather}. \
+                #            It was {temp} degrees and the wind was {winds}".format(
+                #            location=current_obs.find("location").text,
+                #            weather=current_obs.find("weather").text,
+                #            temp=current_obs.find('temp_f').text,
+                #            winds=current_obs.find('wind_string').text))
+
                 if len(history) > 25:
                     foo = history.pop(0)
-                speak_weather(current_obs)
                 last_obs_time = cur_obs_time
 
             target_temp.value = ksgf_temp
@@ -77,25 +87,20 @@ def web_stuff(target_temp, signal, p, history):
             print e
             time.sleep(10)
 
-        except Exception:
+        except Exception as e:
             print "Other exception"
+            print e
             break
         finally:
             pass
     print "Web process finishing"
 
 def speak_weather(current_obs):
-    speech.say("At {location}, the weather was {weather}. \
-               It was {temp} degrees and the wind was {winds}".format(
-               location=current_obs.find("location").text,
-               weather=current_obs.find("weather").text,
-               temp=current_obs.find('temp_f').text,
-               winds=current_obs.find('wind_string').text))
-
+    pass
 
 if __name__ == '__main__':
     manager = Manager()
-    target_temp = manager.Value("d", 0.0)
+    target_temp = manager.Value("d", -999.0)
     signal = manager.Value('h', 0)
     history = manager.list()
     serial_pipe = Pipe()
