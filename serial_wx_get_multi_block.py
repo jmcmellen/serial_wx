@@ -1,6 +1,5 @@
 import serial
 from multiprocessing import Process, Pipe, Manager
-import Queue as Q
 import time
 import random
 import speech
@@ -77,11 +76,16 @@ def web_stuff(target_temp, signal, p, history):
             run_counter = 0
 
         except requests.exceptions.RequestException as e:
+            print "Requests exception"
+            print type(e)
             print e
             time.sleep(10)
 
         except Exception:
+            print "Other exception"
             break
+        finally:
+            pass
     print "Web process finishing"
 
 if __name__ == '__main__':
@@ -104,16 +108,14 @@ if __name__ == '__main__':
             if data == 'quit':
                 break
             if data == "hist":
-                print history
+                for reading in history:
+                    print reading
             if data == '':
                 pass
             else:
                 print e
         except KeyboardInterrupt:
             break
-        except Q.Empty:
-            print "Queue empty"
-            pass
         except Exception as e:
             print e
             break
