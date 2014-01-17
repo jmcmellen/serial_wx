@@ -3,6 +3,7 @@ from multiprocessing import Process, Pipe, Manager
 import Queue as Q
 import time
 import random
+import speech
 import requests
 import xml.etree.ElementTree as ET
 from httpcache import CachingHTTPAdapter
@@ -59,6 +60,12 @@ def web_stuff(target_temp, signal, p, history):
                                 current_obs.find('observation_time_rfc822').text])
                 if len(history) > 25:
                     foo = history.pop(0)
+                speech.say("At {location}, the weather was {weather}. \
+                           It was {temp} degrees and the wind was {winds}".format(
+                           location=current_obs.find("location").text,
+                           weather=current_obs.find("weather").text,
+                           temp=current_obs.find('temp_f').text,
+                           winds=current_obs.find('wind_string').text))
                 last_obs_time = cur_obs_time
 
             target_temp.value = ksgf_temp
