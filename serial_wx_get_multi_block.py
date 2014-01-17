@@ -60,12 +60,7 @@ def web_stuff(target_temp, signal, p, history):
                                 time.strftime("%a, %d %b %Y %H:%M:%S -0600")])
                 if len(history) > 25:
                     foo = history.pop(0)
-                speech.say("At {location}, the weather was {weather}. \
-                           It was {temp} degrees and the wind was {winds}".format(
-                           location=current_obs.find("location").text,
-                           weather=current_obs.find("weather").text,
-                           temp=current_obs.find('temp_f').text,
-                           winds=current_obs.find('wind_string').text))
+                speak_weather(current_obs)
                 last_obs_time = cur_obs_time
 
             target_temp.value = ksgf_temp
@@ -88,6 +83,15 @@ def web_stuff(target_temp, signal, p, history):
         finally:
             pass
     print "Web process finishing"
+
+def speak_weather(current_obs):
+    speech.say("At {location}, the weather was {weather}. \
+               It was {temp} degrees and the wind was {winds}".format(
+               location=current_obs.find("location").text,
+               weather=current_obs.find("weather").text,
+               temp=current_obs.find('temp_f').text,
+               winds=current_obs.find('wind_string').text))
+
 
 if __name__ == '__main__':
     manager = Manager()
