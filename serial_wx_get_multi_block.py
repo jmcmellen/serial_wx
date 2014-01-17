@@ -56,18 +56,18 @@ def web_stuff(target_temp, signal, p, history):
             #print req.headers
             current_obs = ET.fromstring(req.content)
             ksgf_temp = float(current_obs.find('temp_f').text)
-            print current_obs.find("location").text
+            #print current_obs.find("location").text
             cur_obs_time = current_obs.find('observation_time_rfc822').text
             if last_obs_time != cur_obs_time:
                 history.append([ksgf_temp,
                                 current_obs.find('observation_time_rfc822').text,
                                 time.strftime("%a, %d %b %Y %H:%M:%S -0600")])
-                #speech.say("At {location}, the weather was {weather}. \
-                #            It was {temp} degrees and the wind was {winds}".format(
-                #            location=current_obs.find("location").text,
-                #            weather=current_obs.find("weather").text,
-                #            temp=current_obs.find('temp_f').text,
-                #            winds=current_obs.find('wind_string').text))
+                speech.say("At {location}, the weather was {weather}. \
+                            It was {temp} degrees and the wind was {winds}".format(
+                            location=current_obs.find("location").text,
+                            weather=current_obs.find("weather").text,
+                            temp=current_obs.find('temp_f').text,
+                            winds=current_obs.find('wind_string').text))
 
                 if len(history) > 25:
                     foo = history.pop(0)
