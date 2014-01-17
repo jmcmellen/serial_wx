@@ -56,8 +56,8 @@ def web_stuff(target_temp, signal, p, history):
             cur_obs_time = current_obs.find('observation_time_rfc822').text
             if last_obs_time != cur_obs_time:
                 history.append([ksgf_temp,
-                                current_obs.find('observation_time_rfc822').text],
-                                time.strftime("%a, %d %b %Y %H:%M:%S -0600"))
+                                current_obs.find('observation_time_rfc822').text,
+                                time.strftime("%a, %d %b %Y %H:%M:%S -0600")])
                 if len(history) > 25:
                     foo = history.pop(0)
                 speech.say("At {location}, the weather was {weather}. \
