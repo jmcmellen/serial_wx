@@ -74,8 +74,7 @@ def web_stuff(target_temp, signal, p, history):
                 if len(history) > 25:
                     foo = history.pop(0)
                 last_obs_time = cur_obs_time
-
-            target_temp.value = ksgf_temp
+                target_temp.value = ksgf_temp
             while run_counter < 6000:
                 if signal.value > 0:
                     raise Exception
