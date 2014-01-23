@@ -44,8 +44,8 @@ def serial_stuff(target_temp, signal, p):
             break
     print "Serial process finishing"
 
-def web_stuff(target_temp, signal, p, history):
-    run_counter = 0
+def web_stuff(target_temp, signal, p, history, run_counter):
+    run_counter.value = 0
     location_url = "http://www.weather.gov/data/current_obs/KSGF.xml"
     s = requests.Session()
     s.mount('http://', CachingHTTPAdapter())
@@ -75,12 +75,12 @@ def web_stuff(target_temp, signal, p, history):
                     foo = history.pop(0)
                 last_obs_time = cur_obs_time
                 target_temp.value = ksgf_temp
-            while run_counter < 6000:
+            while run_counter.value < 6000:
                 if signal.value > 0:
                     raise Exception
                 time.sleep(0.5)
-                run_counter += random.randint(1,20)
-            run_counter = 0
+                run_counter.value += random.randint(1,20)
+            run_counter.value = 0
 
         except requests.exceptions.RequestException as e:
             print "Requests exception"
@@ -111,12 +111,13 @@ if __name__ == '__main__':
     manager = Manager()
     target_temp = manager.Value("d", -999.0)
     signal = manager.Value('h', 0)
+    web_run_ctr = manager.Value("d", 6000)
     history = manager.list()
     serial_pipe = Pipe()
     serial_proc = Process(target=serial_stuff, args=(target_temp,signal,serial_pipe))
     serial_proc.start()
     web_pipe = Pipe()
-    web_proc = Process(target=web_stuff, args=(target_temp,signal,web_pipe,history))
+    web_proc = Process(target=web_stuff, args=(target_temp,signal,web_pipe,history,web_run_ctr))
     web_proc.start()
     while True:
         try:
@@ -138,7 +139,11 @@ if __name__ == '__main__':
                 for reading in history:
                     print reading
             elif data == '':
+                print "Current temperature value is", target_temp.value
                 pass
+            elif data == 'refresh':
+                print web_run_ctr
+                web_run_ctr.value = 8000
             else:
                 print "I didn't understand that"
                 print e.message
