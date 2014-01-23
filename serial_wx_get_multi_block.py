@@ -6,6 +6,8 @@ import speech
 import requests
 import xml.etree.ElementTree as ET
 from httpcache import CachingHTTPAdapter
+import traceback
+import pywintypes
 
 def serial_stuff(target_temp, signal, p):
     com = serial.serial_for_url("COM10", timeout=2)
@@ -85,11 +87,19 @@ def web_stuff(target_temp, signal, p, history):
             print "Requests exception"
             print type(e)
             print e
+            print traceback.format_exc()
             time.sleep(10)
+
+        except pywintypes.com_error as e:
+            print "Win32 error"
+            print type(e)
+            print traceback.format_exc()
 
         except Exception as e:
             print "Other exception"
+            print type(e)
             print e
+            print traceback.format_exc()
             break
         finally:
             pass
@@ -117,18 +127,29 @@ if __name__ == '__main__':
         except ValueError as e:
             if data == 'quit':
                 break
-            if data == "hist":
+            elif data == 'help':
+                print """**** Help
+        'quit' => exit the program
+        'hist' => get a history of temperature readings
+         type a number => set the temperature to 'number'
+        'help' => this page
+"""
+            elif data == "hist":
+                print "-Temp--Observation Time--------------------Downloaded Time---------"
                 for reading in history:
                     print reading
-            if data == '':
+            elif data == '':
                 pass
             else:
-                print e
+                print "I didn't understand that"
+                print e.message
         except KeyboardInterrupt:
             break
         except Exception as e:
             print e
             break
+        finally:
+            pass
 
     signal.value = 1
     print "Waiting to close comport..."
