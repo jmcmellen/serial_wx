@@ -71,7 +71,7 @@ def web_stuff(target_temp, signal, p, history, run_counter):
                             temp=current_obs.find('temp_f').text,
                             winds=current_obs.find('wind_string').text))
 
-                if len(history) > 25:
+                if len(history) > 49:
                     foo = history.pop(0)
                 last_obs_time = cur_obs_time
                 target_temp.value = ksgf_temp
