@@ -139,10 +139,6 @@ def web_process(target_temp, signal, p, history):
             pass
     print "Exiting web process..."
 
-
-def speak_weather(current_obs):
-    pass
-
 if __name__ == '__main__':
     manager = Manager()
     target_temp = manager.Value("d", -999.0)
