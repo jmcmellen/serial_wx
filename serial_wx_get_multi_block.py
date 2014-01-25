@@ -113,7 +113,7 @@ def web_process(target_temp, signal, p, history):
                 if speech_flag:
                     speak_weather(**obs_data)
 
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.HTTPError as e:
             print "Requests exception"
             if e.response.status_code == 404:
                 print "The url {url} is not found".format(url=e.response.url)
@@ -121,6 +121,11 @@ def web_process(target_temp, signal, p, history):
                 print type(e)
                 print e
                 print traceback.format_exc()
+            back_off_ctr += 1
+            continue
+        except  requests.exceptions.ConnectionError as e:
+            print "Connection problem, lost Internet connectivity?"
+            print e
             back_off_ctr += 1
             continue
 
