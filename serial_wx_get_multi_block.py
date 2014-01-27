@@ -10,7 +10,7 @@ import traceback
 import pywintypes
 
 def serial_stuff(target_temp, signal, p):
-    com = serial.serial_for_url("COM10", timeout=2)
+    com = serial.serial_for_url("COM8", timeout=2)
     line_buffer = ""
     output_temp = target_temp.value
     while True:

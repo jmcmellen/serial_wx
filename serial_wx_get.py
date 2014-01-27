@@ -1,6 +1,7 @@
 import serial
 from multiprocessing import Process, Pipe, Manager
 import time
+import sys
 import random
 import speech
 import requests
@@ -9,7 +10,7 @@ from httpcache import CachingHTTPAdapter
 import traceback
 import pywintypes
 
-def serial_stuff(target_temp, signal, p):
+def serial_output_proc(target_temp, term_signal):
     com = serial.serial_for_url("COM10", timeout=2)
     line_buffer = ""
     output_temp = target_temp.value
@@ -17,17 +18,18 @@ def serial_stuff(target_temp, signal, p):
         try:
             #print "Reading serial"
             byte = com.read(1)
-            if signal.value > 0:
+            if term_signal.value > 0:
                 raise Exception
             if byte == '\r':
                 #print line_buffer #Or pass the data somewhere else
-                if output_temp < -998:
+                if output_temp < -998 or target_temp.value < -998:
                     foo = com.write("E000\r\n")
+                    output_temp = target_temp.value
                 elif output_temp < 0:
                     foo = com.write("{0}\r\n".format(output_temp))
                 else:
                     foo = com.write("+{0}\r\n".format(output_temp))
-                if output_temp < -998 and target_temp >= -998:
+                if output_temp < -998 and target_temp.value >= -998:
                     output_temp = target_temp.value
                 elif output_temp < target_temp.value:
                     output_temp = output_temp + 1
@@ -44,7 +46,65 @@ def serial_stuff(target_temp, signal, p):
             break
     print "Serial process finishing"
 
-def web_process(target_temp, signal, p, history):
+def serial_input_proc(target_temp, term_signal, p, history):
+    com = serial.serial_for_url("COM9", timeout=2)
+    serial_temp = ''
+    line_buffer = ""
+    byte = ''
+
+    def get_temp_by_char(line_buffer, byte):
+        while True:
+            try:
+                if term_signal.value > 0:
+                    raise Exception
+                foo = com.write('\r')
+                byte = com.read(1)
+                if byte == '\r':
+                    #print line_buffer
+                    string_temp = line_buffer
+                    line_buffer = ''
+                    temperature = float(string_temp)
+                else:
+                    line_buffer = line_buffer + byte
+                    raise ValueError
+            except ValueError:
+                #print "Error"
+                continue
+            except Exception as e:
+                com.close()
+                print traceback.format_exc()
+                break
+            else:
+                print temperature
+                history.append(['COM', temperature, time.strftime("%a, %d %b %Y %H:%M:%S -0600") ])
+                if len(history) > 100:
+                    foo = history.pop()
+                if p.poll(10):
+                    print p.recv()
+                continue
+
+    def get_temp_by_timeout(serial_temp):
+        while True:
+            try:
+                #print "Reading serial"
+                foo = com.write('\r')
+                serial_temp = com.read(10)
+                if term_signal.value > 0:
+                    raise Exception
+                temperature = float(serial_temp)
+            except ValueError:
+                continue
+            except Exception as e:
+                com.close()
+                print traceback.format_exc()
+                break
+            else:
+                print temperature
+
+    get_temp_by_char(line_buffer, byte)
+    print "Serial input finishing"
+
+def web_process(target_temp, term_signal, p, history):
     s = requests.Session()
     s.mount('http://', CachingHTTPAdapter())
     last_obs_time = ''
@@ -103,13 +163,15 @@ def web_process(target_temp, signal, p, history):
                     p.send("Speech output set {0}".format(data[1]))
                 else:
                     pass
-            if signal.value > 0:
+            if term_signal.value > 0:
                 raise Exception
             obs_data = get_temperature(location, s)
             if last_obs_time != obs_data['cur_obs_time']:
                 #print "Temperature updated"
                 history.append([location, obs_data['temp'], obs_data['cur_obs_time'],
                                 time.strftime("%a, %d %b %Y %H:%M:%S -0600")])
+                if len(history) > 48:
+                    foo = history.pop()
                 #print temp
                 target_temp.value = obs_data['temp']
                 last_obs_time = obs_data['cur_obs_time']
@@ -153,17 +215,21 @@ def web_process(target_temp, signal, p, history):
 if __name__ == '__main__':
     manager = Manager()
     target_temp = manager.Value("d", -999.0)
-    signal = manager.Value('h', 0)
+    term_signal = manager.Value('h', 0)
     #web_run_ctr = manager.Value("d", 6000)
     history = manager.list()
-    serial_pipe = Pipe()
-    serial_proc = Process(target=serial_stuff, args=(target_temp,signal,serial_pipe))
-    serial_proc.start()
+    serial_history = manager.list()
+    serial_in_pipe, serial_in_pipe_child = Pipe()
+    serial_in = Process(target=serial_input_proc, args=(target_temp, term_signal, serial_in_pipe_child, serial_history))
+    serial_in.start()
+    serial_out = Process(target=serial_output_proc, args=(target_temp,term_signal))
+    serial_out.start()
     web_pipe, web_pipe_child= Pipe()
-    web_proc = Process(target=web_process, args=(target_temp,signal,web_pipe_child,history))
+    web_proc = Process(target=web_process, args=(target_temp,term_signal,web_pipe_child,history))
     #web_proc = Process(target=web_stuff, args=(target_temp,signal,web_pipe,history,web_run_ctr))
     web_proc.start()
     web_pipe.send(['location', 'KSGF'])
+    #serial_in_pipe.send('Begin')
     if web_pipe.poll(2):
         print web_pipe.recv()
     while True:
@@ -189,6 +255,10 @@ if __name__ == '__main__':
             elif data == "hist":
                 print "Location-Temp--Observation Time--------------------Downloaded Time---------"
                 for reading in history:
+                    print reading
+                continue
+            elif data == "comhist":
+                for reading in serial_history:
                     print reading
                 continue
             elif data == '':
@@ -225,9 +295,11 @@ if __name__ == '__main__':
         finally:
             pass
 
+    term_signal.value = 1
     web_pipe.send("Exit")
-    signal.value = 1
+    serial_in_pipe.send("Exit")
     print "Waiting to close comport..."
-    serial_proc.join()
+    serial_in.join()
+    serial_out.join()
     web_proc.join()
     print "Exiting process"
