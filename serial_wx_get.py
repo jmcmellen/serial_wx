@@ -101,7 +101,7 @@ def serial_input_proc(target_temp, term_signal, p, history):
             else:
                 print temperature
 
-    get_temp_by_char(line_buffer, byte)
+    #get_temp_by_char(line_buffer, byte)
     print "Serial input finishing"
 
 def web_process(target_temp, term_signal, p, history):
