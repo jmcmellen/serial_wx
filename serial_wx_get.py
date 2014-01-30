@@ -101,7 +101,7 @@ def serial_input_proc(target_temp, term_signal, p, history):
             else:
                 print temperature
 
-    get_temp_by_char(line_buffer, byte)
+    #get_temp_by_char(line_buffer, byte)
     print "Serial input finishing"
 
 def web_process(target_temp, term_signal, p, history):
@@ -217,6 +217,24 @@ def web_process(target_temp, term_signal, p, history):
             pass
     print "Exiting web process..."
 
+def get_weather_stations():
+    r = requests.get('http://w1.weather.gov/xml/current_obs/index.xml')
+    #print r.content
+    stations_dict = {}
+    try:
+        root = ET.fromstring(r.content)
+        for station in root.findall('station'):
+            state = station.find('state').text
+            if state in stations_dict:
+                stations_dict[state].append(station.find('station_id').text)
+            else:
+                stations_dict[state] = []
+            #print station.find('state').text, station.find('station_id').text
+    except:
+        print "Couldn't retrieve station list"
+    #print stations_dict
+    return stations_dict
+
 if __name__ == '__main__':
     manager = Manager()
     target_temp = manager.Value("d", -999.0)
@@ -237,6 +255,8 @@ if __name__ == '__main__':
     #serial_in_pipe.send('Begin')
     if web_pipe.poll(2):
         print web_pipe.recv()
+    stations = get_weather_stations()
+    #print stations['MO']
     while True:
         try:
             if web_pipe.poll(0.1):
@@ -290,8 +310,18 @@ if __name__ == '__main__':
                     web_pipe.send(['speech', False])
                 if web_pipe.poll(2):
                     print web_pipe.recv()
+                continue
+            elif data[0:8] == 'stations':
+                state = data[9:].upper().strip()
+                print state
+                if state in stations:
+                    print stations[state]
+                else:
+                    print "State not found"
+                continue
             else:
                 print "I didn't understand that, maybe try 'help'?"
+                print data[0:7]
                 #print e.message
                 continue
         except KeyboardInterrupt:
