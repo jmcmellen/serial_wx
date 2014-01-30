@@ -118,6 +118,7 @@ def web_process(target_temp, term_signal, p, history):
         req = session.get(location_url)
         req.raise_for_status()
         #print req.headers
+
         try:
             current_obs = ET.fromstring(req.content)
             obs_data = {'temp_f':None,
@@ -156,7 +157,8 @@ def web_process(target_temp, term_signal, p, history):
                 data = p.recv()
                 if data[0] == 'refresh':
                     last_obs_time = ''
-                elif data[0] == 'location':
+                    s.mount('http://', CachingHTTPAdapter())
+                elif data[0] == 'Location':
                     last_obs_time = ''
                     location = data[1].upper()
                 elif data[0] == 'speech':
@@ -226,7 +228,8 @@ def get_weather_stations():
         for station in root.findall('station'):
             state = station.find('state').text
             if state in stations_dict:
-                stations_dict[state].append(station.find('station_id').text)
+                stations_dict[state].append({'id':station.find('station_id').text,
+                                             "name":station.find('station_name').text})
             else:
                 stations_dict[state] = []
             #print station.find('state').text, station.find('station_id').text
@@ -273,7 +276,7 @@ if __name__ == '__main__':
         'hist' => get a history of temperature readings
         'set XXXX' => set the weather location to XXXX
         'refresh' => force refresh
-        'speech [on|off]' => turn speech on or off
+        'stations XX' => show list of stations in a state
          type a number => set the temperature to 'number'
         'help' => this page
 """
@@ -315,7 +318,8 @@ if __name__ == '__main__':
                 state = data[9:].upper().strip()
                 print state
                 if state in stations:
-                    print stations[state]
+                    for station in stations[state]:
+                        print "{id} - {name}".format(**station)
                 else:
                     print "State not found"
                 continue
