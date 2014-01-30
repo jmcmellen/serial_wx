@@ -7,7 +7,7 @@ import requests
 import xml.etree.ElementTree as ET
 from httpcache import CachingHTTPAdapter
 import traceback
-import pywintypes
+#import pywintypes
 
 def serial_stuff(target_temp, signal, p):
     com = serial.serial_for_url("COM8", timeout=2)
@@ -51,7 +51,7 @@ def web_process(target_temp, signal, p, history):
     location = "KSGF"
     back_off_ctr = 0
     refresh_requested = False
-    speech_flag = False
+    speech_flag = True
 
     def get_temperature(location, session):
         location_url = "http://www.weather.gov/data/current_obs/{location}.xml".format(location=location)
@@ -60,34 +60,36 @@ def web_process(target_temp, signal, p, history):
         #print req.headers
         try:
             current_obs = ET.fromstring(req.content)
-            temp = float(current_obs.find('temp_f').text)
-            loc_text = current_obs.find("location").text
-            weather = current_obs.find('weather').text
-            winds = current_obs.find('wind_string').text
-            cur_obs_time = current_obs.find('observation_time_rfc822').text
-        except Exception as e:
+            obs_data = {'temp_f':None,
+                        'observation_time_rfc822':None,
+                        'location':None,
+                        'weather':None,
+                        'wind_string':None,
+                        'foo':None}
+            for key in obs_data.keys():
+                print key
+                obs_data[key] = current_obs.find(key).text
+        except AttributeError as e:
             #To do: better handling if the data returned is not understood
+            print "Something went wrong with the weather data"
             print e.args
             print traceback.format_exc()
+            continue
         finally:
-            return {'temp':temp,
-                    'loc_text':loc_text,
-                    'weather':weather,
-                    'winds':winds,
-                    'cur_obs_time':cur_obs_time}
+            return obs_data
 
     def speak_weather(**kwargs):
-        #for key in kwargs.keys():
-        #    print key, kwargs[key]
-        speech.say("At {loc_text}, the weather was {weather}. \
-                    It was {temp} degrees and the wind was {winds}".format(**kwargs).replace(
+        for key in kwargs.keys():
+            print key, kwargs[key]
+        speech.say("At {location}, the weather was {weather}. \
+                    It was {temp_f} degrees and the wind was {wind_string}".format(**kwargs).replace(
                          'KT)', 'knots)'))
 
     while True:
         try:
             if back_off_ctr > 0:
                 back_off_time = random.randrange(0,(2**back_off_ctr - 1)) * 10
-                print back_off_time
+                print "Backing off for {0} seconds".format(back_off_time)
             else:
                 back_off_time = 0
             refresh_requested = p.poll(300 + random.randrange(0,120) + back_off_time)
@@ -106,16 +108,17 @@ def web_process(target_temp, signal, p, history):
             if signal.value > 0:
                 raise Exception
             obs_data = get_temperature(location, s)
-            if last_obs_time != obs_data['cur_obs_time']:
+            if last_obs_time != obs_data['observation_time_rfc822'] and \
+                          obs_data['observation_time_rfc822'] is not None:
                 #print "Temperature updated"
-                history.append([location, obs_data['temp'], obs_data['cur_obs_time'],
+                history.append([location, obs_data['temp_f'],
+                                obs_data['observation_time_rfc822'],
                                 time.strftime("%a, %d %b %Y %H:%M:%S -0600")])
                 #print temp
-                target_temp.value = obs_data['temp']
-                last_obs_time = obs_data['cur_obs_time']
+                target_temp.value = float(obs_data['temp_f'])
                 #print "temp updated", loc_text, temp
                 if refresh_requested:
-                    p.send("Temperature updated\n{0}\n{1}".format(obs_data['loc_text'], obs_data['temp']))
+                    p.send("Temperature updated\n{0}\n{1}".format(obs_data['location'], obs_data['temp_f']))
                 if speech_flag:
                     speak_weather(**obs_data)
 
@@ -135,17 +138,23 @@ def web_process(target_temp, signal, p, history):
             back_off_ctr += 1
             continue
 
-        except pywintypes.com_error as e:
-            print "Win32 error"
-            print type(e)
-            print traceback.format_exc()
+        except ValueError:
+            print "Bad temperature value"
             continue
+
+        #except pywintypes.com_error as e:
+        #    print "Win32 error"
+        #    print type(e)
+        #    print traceback.format_exc()
+        #    continue
 
         except Exception as e:
             print e
             break
         else:
             back_off_ctr = 0
+            last_obs_time = obs_data['observation_time_rfc822']
+
         finally:
             pass
     print "Exiting web process..."
