@@ -10,7 +10,7 @@ from httpcache import CachingHTTPAdapter
 import traceback
 #import pywintypes
 
-def serial_output_proc(target_temp, term_signal):
+def serial_output_proc(target_temp, term_signal, web_watchdog, serial_in_temp):
     com = serial.serial_for_url("COM10", timeout=2)
     line_buffer = ""
     output_temp = target_temp.value
@@ -22,13 +22,19 @@ def serial_output_proc(target_temp, term_signal):
                 raise Exception
             if byte == '\r':
                 #print line_buffer #Or pass the data somewhere else
+                web_watchdog.value -= 1
+                if web_watchdog.value == 1:
+                    print "\nInternet source timed out, switching to backup serial"
+                    output_temp = serial_in_temp.value
+                    #web_watchdog.value = 1
+                if web_watchdog.value < 1:
+                    target_temp.value = serial_in_temp.value
+                    web_watchdog.value = 0
                 if output_temp < -998 or target_temp.value < -998:
                     foo = com.write("E000\r\n")
                     output_temp = target_temp.value
-                elif output_temp < 0:
-                    foo = com.write("{0}\r\n".format(output_temp))
                 else:
-                    foo = com.write("+{0}\r\n".format(output_temp))
+                    foo = com.write("{0:0=+#4d}\r\n".format(output_temp))
                 if output_temp < -998 and target_temp.value >= -998:
                     output_temp = target_temp.value
                 elif output_temp < target_temp.value:
@@ -46,7 +52,7 @@ def serial_output_proc(target_temp, term_signal):
             break
     print "Serial process finishing"
 
-def serial_input_proc(target_temp, term_signal, p, history):
+def serial_input_proc(target_temp, term_signal, p, history, serial_in_temp):
     com = serial.serial_for_url("COM9", timeout=2)
     serial_temp = ''
     line_buffer = ""
@@ -63,7 +69,7 @@ def serial_input_proc(target_temp, term_signal, p, history):
                     #print line_buffer
                     string_temp = line_buffer
                     line_buffer = ''
-                    temperature = float(string_temp)
+                    temperature = int(string_temp)
                 else:
                     line_buffer = line_buffer + byte
                     raise ValueError
@@ -77,9 +83,10 @@ def serial_input_proc(target_temp, term_signal, p, history):
             else:
                 #print temperature
                 #sys.stdout.write(" | " + string_temp)
-                history.append(['COM', temperature, time.strftime("%a, %d %b %Y %H:%M:%S -0600") ])
-                if len(history) > 100:
+                history.append(['COM', string_temp, time.strftime("%a, %d %b %Y %H:%M:%S -0600") ])
+                if len(history) > 300:
                     foo = history.pop(0)
+                serial_in_temp.value = temperature
                 if p.poll(32):
                     print p.recv()
 
@@ -91,7 +98,7 @@ def serial_input_proc(target_temp, term_signal, p, history):
                 serial_temp = com.read(10)
                 if term_signal.value > 0:
                     raise Exception
-                temperature = float(serial_temp)
+                temperature = int(serial_temp)
             except ValueError:
                 continue
             except Exception as e:
@@ -102,9 +109,10 @@ def serial_input_proc(target_temp, term_signal, p, history):
                 print temperature
 
     #get_temp_by_char(line_buffer, byte)
+    serial_in_temp.value = 33
     print "Serial input finishing"
 
-def web_process(target_temp, term_signal, p, history):
+def web_process(target_temp, term_signal, p, history, watchdog):
     s = requests.Session()
     s.mount('http://', CachingHTTPAdapter())
     last_obs_time = ''
@@ -158,7 +166,7 @@ def web_process(target_temp, term_signal, p, history):
                 if data[0] == 'refresh':
                     last_obs_time = ''
                     s.mount('http://', CachingHTTPAdapter())
-                elif data[0] == 'Location':
+                elif data[0] == 'location':
                     last_obs_time = ''
                     location = data[1].upper()
                 elif data[0] == 'speech':
@@ -177,7 +185,8 @@ def web_process(target_temp, term_signal, p, history):
                 if len(history) > 48:
                     foo = history.pop(0)
                 #print temp
-                target_temp.value = float(obs_data['temp_f'])
+                target_temp.value = int(float(obs_data['temp_f']))
+                watchdog.value = 1000
                 if refresh_requested:
                     p.send("Temperature updated\n{0}\n{1}".format(obs_data['location'], obs_data['temp_f']))
                 if speech_flag:
@@ -206,6 +215,7 @@ def web_process(target_temp, term_signal, p, history):
         #    continue
 
         except ValueError:
+            print traceback.format_exc()
             print "Bad temperature value"
             continue
         except Exception as e:
@@ -240,18 +250,21 @@ def get_weather_stations():
 
 if __name__ == '__main__':
     manager = Manager()
-    target_temp = manager.Value("d", -999.0)
+    target_temp = manager.Value("h", -999)
     term_signal = manager.Value('h', 0)
+    web_watchdog = manager.Value('h', 0)
+    serial_in_temp = manager.Value('h', -999)
     #web_run_ctr = manager.Value("d", 6000)
     history = manager.list()
     serial_history = manager.list()
     serial_in_pipe, serial_in_pipe_child = Pipe()
-    serial_in = Process(target=serial_input_proc, args=(target_temp, term_signal, serial_in_pipe_child, serial_history))
+    serial_in = Process(target=serial_input_proc, args=(target_temp, term_signal,
+                                                        serial_in_pipe_child, serial_history, serial_in_temp))
     serial_in.start()
-    serial_out = Process(target=serial_output_proc, args=(target_temp,term_signal))
+    serial_out = Process(target=serial_output_proc, args=(target_temp,term_signal,web_watchdog,serial_in_temp))
     serial_out.start()
     web_pipe, web_pipe_child= Pipe()
-    web_proc = Process(target=web_process, args=(target_temp,term_signal,web_pipe_child,history))
+    web_proc = Process(target=web_process, args=(target_temp,term_signal,web_pipe_child,history,web_watchdog))
     #web_proc = Process(target=web_stuff, args=(target_temp,signal,web_pipe,history,web_run_ctr))
     web_proc.start()
     web_pipe.send(['location', 'KSGF'])
@@ -265,7 +278,8 @@ if __name__ == '__main__':
             if web_pipe.poll(0.1):
                 print web_pipe.recv()
             data = raw_input(">>>")
-            target_temp.value = float(data)
+            target_temp.value = int(data)
+            web_watchdog.value = 1000
             print "Current temperature value is", target_temp.value
         except ValueError as e:
             if data == 'quit' or data == 'exit':
