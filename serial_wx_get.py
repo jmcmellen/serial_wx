@@ -24,7 +24,8 @@ def serial_output_proc(target_temp, term_signal, web_watchdog, serial_in_temp):
                 #print line_buffer #Or pass the data somewhere else
                 web_watchdog.value -= 1
                 if web_watchdog.value == 1:
-                    print "\nInternet source timed out, switching to backup serial"
+                    print "\nInternet source timed out, switching to backup serial", \
+                            time.strftime("%a, %d %b %Y %H:%M:%S -0600")
                     output_temp = serial_in_temp.value
                     #web_watchdog.value = 1
                 if web_watchdog.value < 1:
@@ -35,6 +36,7 @@ def serial_output_proc(target_temp, term_signal, web_watchdog, serial_in_temp):
                     output_temp = target_temp.value
                 else:
                     foo = com.write("{0:0=+#4d}\r\n".format(output_temp))
+                    #print "{0:0=+#4d}".format(output_temp), time.strftime("%H:%M:%S")
                 if output_temp < -998 and target_temp.value >= -998:
                     output_temp = target_temp.value
                 elif output_temp < target_temp.value:
@@ -186,7 +188,7 @@ def web_process(target_temp, term_signal, p, history, watchdog):
                     foo = history.pop(0)
                 #print temp
                 target_temp.value = int(float(obs_data['temp_f']))
-                watchdog.value = 1000
+                watchdog.value = 2250
                 if refresh_requested:
                     p.send("Temperature updated\n{0}\n{1}".format(obs_data['location'], obs_data['temp_f']))
                 if speech_flag:
@@ -279,7 +281,7 @@ if __name__ == '__main__':
                 print web_pipe.recv()
             data = raw_input(">>>")
             target_temp.value = int(data)
-            web_watchdog.value = 1000
+            web_watchdog.value = 2250
             print "Current temperature value is", target_temp.value
         except ValueError as e:
             if data == 'quit' or data == 'exit':
@@ -292,6 +294,7 @@ if __name__ == '__main__':
         'refresh' => force refresh
         'stations XX' => show list of stations in a state
          type a number => set the temperature to 'number'
+        'watchdog' => show how long till we switch to backup source
         'help' => this page
 """
             elif data == "hist":
@@ -308,6 +311,10 @@ if __name__ == '__main__':
             elif data == '':
                 print "Current temperature value is", target_temp.value
                 continue
+            elif data == 'watchdog':
+                print "{0:.1f}% of watchdog remaining, about {min} minutes, {sec} seconds".format(
+                    web_watchdog.value / 2250.0 * 100, min=2*web_watchdog.value//60,
+                    sec=2*web_watchdog.value%60)
             elif data == 'refresh':
                 print "Refreshing"
                 web_pipe.send(['refresh',])
