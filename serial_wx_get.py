@@ -26,7 +26,7 @@ def serial_output_proc(target_temp, term_signal, web_watchdog, serial_in_temp):
                 if web_watchdog.value == 1:
                     print "\nInternet source timed out, switching to backup serial", \
                             time.strftime("%a, %d %b %Y %H:%M:%S -0600")
-                    output_temp = serial_in_temp.value
+                    target_temp.value = serial_in_temp.value
                     #web_watchdog.value = 1
                 if web_watchdog.value < 1:
                     target_temp.value = serial_in_temp.value
@@ -311,10 +311,13 @@ if __name__ == '__main__':
             elif data == '':
                 print "Current temperature value is", target_temp.value
                 continue
-            elif data == 'watchdog':
+            elif data[0:8] == 'watchdog':
                 print "{0:.1f}% of watchdog remaining, about {min} minutes, {sec} seconds".format(
                     web_watchdog.value / 2250.0 * 100, min=2*web_watchdog.value//60,
                     sec=2*web_watchdog.value%60)
+                if data[9:] == "clear":
+                    print "Empty timer"
+                    web_watchdog.value = 2
             elif data == 'refresh':
                 print "Refreshing"
                 web_pipe.send(['refresh',])
